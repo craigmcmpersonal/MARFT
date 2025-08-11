@@ -166,7 +166,7 @@ class MAS(ABC):
         Returns
             :sliced_logits: torch.Tensor of shape (rollout_threads, num_agents, max_new_tokens, data_dim)
         """
-        sliced_logits = torch.zeros(act_real_lengths.shape[0], act_real_lengths.shape[1], self.max_new_tokens, logits.shape[-1]).to(logits.device)
+        sliced_logits = torch.empty(act_real_lengths.shape[0], act_real_lengths.shape[1], self.max_new_tokens, logits.shape[-1]).to(logits.device)
         for thread_idx in range(act_real_lengths.shape[0]):
             for agent_idx in range(act_real_lengths.shape[1]):
                 if agent_idx == 0:
@@ -361,8 +361,10 @@ class MAS(ABC):
         return log_probs, entropies
 
     @torch.no_grad()
-    def infer_for_rollout(self, obs):
+    def infer_for_rollout(self, obs, evaluating: bool = False):
         rollout_obs, rollout_actions, rollout_action_tokens = self.get_actions_sequential(obs)
+        if evaluating:
+            return None, rollout_actions, None, None, None
         if self.algo == "APPO":
             rollout_values = self.get_action_values(rollout_obs)
             rollout_values = rollout_values.float().cpu().numpy()

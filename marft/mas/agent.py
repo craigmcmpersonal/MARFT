@@ -71,6 +71,8 @@ class Agent:
             self.model = PeftModel.from_pretrained(
                 self.base_model, adapter_path, adapter_name=self.role
             )
+            self.model.set_adapter(self.role)
+            self.model.train()
         
         self.model.print_trainable_parameters()
         self.model.half()
