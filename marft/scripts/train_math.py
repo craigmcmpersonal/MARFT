@@ -21,7 +21,7 @@ def make_train_env(all_args):
                 model_name=all_args.base_model,
                 num_agents=all_args.n_agents,
                 profile_path=all_args.profile_path,
-                dataset_path=all_args.dataset_path,
+                dataset_path=all_args.train_dataset_path,
                 horizon=all_args.horizon,
                 mode="train",
             )
@@ -39,11 +39,11 @@ def make_eval_env(all_args):
                 model_name=all_args.base_model,
                 num_agents=all_args.n_agents,
                 profile_path=all_args.profile_path,
-                dataset_path=all_args.dataset_path,
+                dataset_path=all_args.test_dataset_path,
                 horizon=all_args.horizon,
                 mode="test",
             )
-            env.seed(all_args.seed + rank * 5000)
+            env.seed(all_args.seed + rank * 1000)
             return env
         return init_env
     return ShareDummyVecEnv([get_env_fn(i) for i in range(all_args.n_eval_rollout_threads)])
@@ -102,12 +102,12 @@ def main(args):
     np.random.seed(all_args.seed)
 
     envs = make_train_env(all_args)
-    # eval_envs = make_eval_env(all_args)
+    eval_envs = make_eval_env(all_args)
 
     config = {
         "all_args": all_args,
         "envs": envs,
-        "eval_envs": None,
+        "eval_envs": eval_envs,
         "num_agents": envs.n_agents if envs is not None else 1,
         "run_dir": run_dir,
     }
