@@ -1,9 +1,10 @@
 import numpy as np
 import json
 import random
+import re
 from typing import Optional
-from .parse_utils_qwen import extract_answer as extract_fn, parse_ground_truth
-from .grader import math_equal
+from . import math
+from . import math_verify
 
 # training data with mode="train" and testing data with mode="test"
 def load_dataset(dataset_path, mode):
@@ -16,15 +17,37 @@ def load_profiles(path):
         profiles = json.load(file)
     return profiles
 
-def extract_answer(answer_str: str) -> str:
-    return extract_fn(answer_str, data_name='math')
+def extract_boxed_value(text):
+    """
+    Extracts the first LaTeX \\boxed{...} expression from the string, supporting nested braces.
 
-def extract_groundtruth(groundtruth_str: str) -> str:
-    return parse_ground_truth(groundtruth_str, data_name='math')
+    Parameters:
+        text (str): The input string containing LaTeX.
 
-def judge_correct(extracted_groundtruth: Optional[str], answer: str) -> bool:
-    result = math_equal(answer, extracted_groundtruth)
-    return result
+    Returns:
+        str or None: The content inside the first \\boxed{...}, or None if not found.
+    """
+    start = text.find(r'\boxed{')
+    if start == -1:
+        return None
+
+    i = start + len(r'\boxed{')
+    brace_count = 1
+    content = []
+
+    while i < len(text):
+        char = text[i]
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+
+        if brace_count == 0:
+            break
+        content.append(char)
+        i += 1
+
+    return ''.join(content) if brace_count == 0 else None
 
 class MathEnv:
 
@@ -43,11 +66,28 @@ class MathEnv:
         self.problem = None
         self.label = None
         self.current_state = None
+        if rank == 0:
+            print(f"The {mode} mode environment has {len(self.dataset)} entries in total.")
 
     def reset(self):
-        problem_answer_pair = random.choice(self.dataset)
-        self.problem = problem_answer_pair["problem"]
-        self.label = problem_answer_pair["final_answer"]
+        # Keep sampling until a valid label is found
+        while True:
+            problem_answer_pair = random.choice(self.dataset)
+            
+            # Try to get the final answer label
+            label = problem_answer_pair.get("final_answer")
+            if not label:
+                label = extract_boxed_value(problem_answer_pair.get("solution", ""))
+            
+            # If label is still None, skip this sample
+            if label is None:
+                continue
+            
+            # Valid sample found
+            self.problem = problem_answer_pair["problem"]
+            self.label = label
+            break
+
         self.current_state = '<|im_start|>problem: ' + self.problem + "<|im_end|>\n"
         self.history = []
         obs = np.array([self.current_state for _ in range(self.n_agents)], dtype=np.object_)
@@ -65,8 +105,9 @@ class MathEnv:
 
         score = 0.0
         for action in actions_to_check:
-            if self._is_correct(action): 
-                score += 1.0
+            # if self._is_correct(action): 
+            #     score += 1.0
+            score += self.compute_reward(action, self.label)
         score /= len(actions_to_check) # normalize
         
         if score > 0.0 or self.step_count >= self.max_steps:
@@ -89,9 +130,21 @@ class MathEnv:
         for i, action in enumerate(actions):
             self.current_state = self.current_state + self.profiles[i]["role"] + ": " + action + "\n"
 
-    def _is_correct(self, completion):
-        extracted_answer = extract_answer(completion)
-        return judge_correct(self.label, extracted_answer)
+    def compute_reward(self, solution_str, gt):
+
+        # res = math.compute_score(solution_str, gt)
+        # [Optional] Math-Verify Integration
+        # For enhanced accuracy, consider utilizing Math-Verify (https://github.com/huggingface/Math-Verify).
+        # Note: Math-Verify needs to be manually installed via pip: `pip install math-verify`.
+        # To use it, override the `compute_score` function with the following implementation:
+        res = math_verify.compute_score(solution_str, gt)
+
+        if isinstance(res, dict):
+            return res
+        elif isinstance(res, (int, float, bool)):
+            return float(res)
+        else:
+            return float(res[0])
 
     def seed(self, seed):
         np.random.seed(seed)
