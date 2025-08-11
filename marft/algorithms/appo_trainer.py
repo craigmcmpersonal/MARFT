@@ -25,6 +25,7 @@ class APPOTrainer(ABC):
         self._use_max_grad_norm = args.use_max_grad_norm
         self._use_clipped_value_loss = args.use_clipped_value_loss
         self._use_huber_loss = args.use_huber_loss
+        self.kl_threshold = args.kl_threshold
         self.lr = args.lr
         self.critic_lr = args.critic_lr
         self.opti_eps = args.opti_eps
@@ -153,7 +154,7 @@ class APPOTrainer(ABC):
             cp_policy_loss = cp_policy_loss * cp_weight
             cp_policy_loss.backward()
             policy_loss += cp_policy_loss.item()
-        if total_approx_kl > 1e-3: # adjust to the real situation
+        if total_approx_kl > self.kl_threshold: # adjust to the real situation
             return value_loss, critic_grad_norm, 0, 0, total_approx_kl, total_entropy
 
         if agent_to_train is not None:
@@ -177,12 +178,12 @@ class APPOTrainer(ABC):
         :return train_info: (dict) contains information regarding training update (e.g. loss, grad norms, etc).
         """
         train_info = {
-            "value_loss": 0,
-            "value_grad_norm": 0,
-            "policy_loss": 0,
-            "policy_grad_norm": 0,
-            "approx_kl": 0,
-            "entropy": 0,
+            "value/loss": 0,
+            "value/grad_norm": 0,
+            "policy/loss": 0,
+            "policy/grad_norm": 0,
+            "policy/approx_kl": 0,
+            "policy/entropy": 0,
         }
 
         update_time = 0
@@ -190,12 +191,12 @@ class APPOTrainer(ABC):
             data_generator = buffer.sample(self.num_mini_batch)
             for sample in data_generator:
                 value_loss, value_grad_norm, policy_loss, policy_grad_norm, approx_kl, entropy = self.ppo_update(sample, global_steps)
-                train_info["value_loss"] += value_loss
-                train_info["value_grad_norm"] += value_grad_norm
-                train_info["policy_loss"] += policy_loss
-                train_info["policy_grad_norm"] += policy_grad_norm
-                train_info["approx_kl"] += approx_kl
-                train_info["entropy"] += entropy
+                train_info["value/loss"] += value_loss
+                train_info["value/grad_norm"] += value_grad_norm
+                train_info["policy/loss"] += policy_loss
+                train_info["policy/grad_norm"] += policy_grad_norm
+                train_info["policy/approx_kl"] += approx_kl
+                train_info["policy/entropy"] += entropy
                 update_time += 1
 
         for k in train_info.keys():

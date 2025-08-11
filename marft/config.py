@@ -34,8 +34,10 @@ def get_config():
             specify the name of environment
         --dataset_name <str>
             specify the name of dataset
-        --dataset_path <str>
-            specify the path of dataset
+        --train_dataset_path <str>
+            specify the path of train dataset
+        --test_dataset_path <str>
+            specify the path of test dataset
         --flag <str>
             specify the flag of dataset, including `["train", "test"]`
 
@@ -135,12 +137,13 @@ def get_config():
     parser.add_argument("--n_rollout_threads", type=int, default=32, help="Number of parallel envs for training rollouts.")
     parser.add_argument("--n_eval_rollout_threads", type=int, default=1, help="Number of parallel envs for evaluating rollouts.")
     parser.add_argument("--num_env_steps", type=int, default=10e6, help="Number of environment steps to train (default: 10e6).")
-    parser.add_argument("--horizon", type=int, default=3, help="The horizon of the rollout.")
+    parser.add_argument("--horizon", type=int, default=1, help="The horizon of the rollout.")
 
     # env parameters
     parser.add_argument("--env_name", type=str, default="MATH", help="Which env to run on")
     parser.add_argument("--dataset_name", type=str, default="xlam", help="Which dataset to test on")
-    parser.add_argument("--dataset_path", type=str, help="path to dataset")
+    parser.add_argument("--train_dataset_path", type=str, help="path to train dataset")
+    parser.add_argument("--test_dataset_path", type=str, help="path to test dataset")
     parser.add_argument("--flag", type=str, default="train", help="flag to distinguish different runs")
 
     # mas parameters
@@ -183,6 +186,7 @@ def get_config():
     parser.add_argument("--use_value_active_masks", action="store_false", default=True, help="by default True, whether to mask useless data in value loss.")
     parser.add_argument("--use_policy_active_masks", action="store_false", default=True, help="by default True, whether to mask useless data in policy loss.")
     parser.add_argument("--huber_delta", type=float, default=10.0, help="coefficience of huber loss.")
+    parser.add_argument("--kl_threshold", type=float, default=1e-3, help="if kl divergence is greater than this, force no update.")
 
     # run parameters
     parser.add_argument("--use_linear_lr_decay", action="store_true", default=False, help="use a linear schedule on the learning rate")
