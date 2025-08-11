@@ -51,6 +51,7 @@ class MathRunner:
 
 
     def run(self):
+        training_steps = 0
         next_obs = self.envs.reset()
         self.buffer.obs[self.buffer.cur_batch_index, 0] = next_obs.copy()
 
@@ -59,6 +60,12 @@ class MathRunner:
         progress_bar = tqdm(total=episodes, desc=f"Start running...", position=0, leave=True)
 
         for episode in range(episodes):
+
+            # if eval
+            if self.all_args.use_eval and episode % self.all_args.eval_interval == 0:
+                torch.cuda.empty_cache()
+                self.eval(training_steps)
+
             total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads
             for step in range(self.episode_length):
                 torch.cuda.empty_cache()
@@ -73,10 +80,12 @@ class MathRunner:
                     global_step = total_num_steps + step * self.n_rollout_threads + i
                     if dones[i, 0]:
                         episodic_return = infos[i]['episodic_return']
-                        self.writter.add_scalar("episodic_return", episodic_return, global_step)
+                        self.writter.add_scalar("episodic return", episodic_return, global_step)
 
             self.before_update()
             train_infos = self.trainer.train(self.buffer, total_num_steps)
+            training_steps += 1
+
             self.buffer.after_update()
 
             # post process
@@ -93,10 +102,8 @@ class MathRunner:
                 )
                 train_infos["average_step_rewards"] = avg_step_reward
                 self.log_train(train_infos, total_num_steps)
+                self.writter.add_scalar('average reward', avg_step_reward, training_steps)
             progress_bar.update(1)
-
-            if self.all_args.use_eval and episode % self.all_args.eval_interval == 0:
-                self.eval(total_num_steps)
 
     def insert(self, data):
         next_obs, rollout_obs, rewards, dones, values, actions, action_tokens, log_probs = data
@@ -116,30 +123,32 @@ class MathRunner:
             self.writter.add_scalars(k, {k: v}, total_num_steps)
 
     @torch.no_grad()
-    def eval(self, total_num_steps):
+    def eval(self, training_steps):
+        print(f"start evaluating......")
         eval_episode = 0
         eval_episode_rewards = []
-
         eval_obs = self.eval_envs.reset()
-        while True:
-            eval_actions, _ = self.mas.get_actions(np.concatenate(eval_obs))
-            eval_actions = np.array(np.split(eval_actions, self.n_eval_rollout_threads))
-            eval_obs, eval_rewards, eval_dones, eval_infos = self.eval_envs.step(eval_actions)
+        _, eval_actions, _, _, _ = self.mas.infer_for_rollout(eval_obs, evaluating=True)
+        eval_next_obs, eval_rewards, eval_dones, eval_infos = self.eval_envs.step(eval_actions)
+        eval_episode_rewards = eval_rewards[:, -1]
+        eval_env_infos = {"eval_episode_rewards": eval_episode_rewards}
+        print("eval reward is {}.".format(np.mean(eval_episode_rewards)))
+        self.log_eval(eval_env_infos, training_steps)
 
-            eval_dones_env = np.all(eval_dones, axis=1)
+        # eval_dones_env = np.all(eval_dones, axis=1)
 
-            for eval_i in range(self.n_eval_rollout_threads):
-                if eval_dones_env[eval_i]:
-                    eval_episode += 1
-                    eval_episode_rewards.append(eval_rewards[eval_i])
+        # for eval_i in range(self.n_eval_rollout_threads):
+        #     if eval_dones_env[eval_i]:
+        #         eval_episode += 1
+        #         eval_episode_rewards.append(eval_rewards[eval_i])
 
-            if eval_episode >= self.all_args.eval_episodes:
-                eval_episode_rewards = np.array(eval_episode_rewards)
-                eval_env_infos = {"eval_average_episode_rewards": eval_episode_rewards}
-                print("total_num_steps: ", total_num_steps)
-                print("eval reward is {}.".format(np.mean(eval_episode_rewards)))
-                self.log_eval(eval_env_infos, total_num_steps)
-                break
+        # if eval_episode >= self.all_args.eval_episodes:
+        #     eval_episode_rewards = np.array(eval_episode_rewards)
+        #     eval_env_infos = {"eval_average_episode_rewards": eval_episode_rewards}
+        #     print("total_num_steps: ", total_num_steps)
+        #     print("eval reward is {}.".format(np.mean(eval_episode_rewards)))
+        #     self.log_eval(eval_env_infos, total_num_steps)
+        #     break
 
     def _make_log_dir(self):
         self.log_dir = str(self.run_dir / "logs")
