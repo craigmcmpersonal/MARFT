@@ -1,7 +1,14 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch
+torchvision
+torchaudio
+numpy
 absl_py
 cloudpickle
 fairscale
 json_repair
+latex2sympy2
+math-verify
 peft
 pydantic
 sentence_transformers
@@ -9,10 +16,5 @@ sentencepiece
 setproctitle
 tensorboard
 tensorboardX
-torch # some version, i used 2.4.0+cu121. the below two as well.
-torchvision # some version
-torchaudio # some version
-numpy==1.26.3
-xformers==0.0.27.post2
-latex2sympy2
+xformers
 word2number
